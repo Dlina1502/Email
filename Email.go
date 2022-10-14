@@ -2,35 +2,41 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"strings"
-	// "log"
 	"context"
 	client "github.com/zinclabs/sdk-go-zincsearch"
 )
 
 func main() {
 	var cont int
-	var registers string
+	var registers []map[string]interface{}
 	cont = 0
-	registers = ""
 	searchEmails("./enron_mail_20110402", &cont, &registers)
+	//countEmails("./enron_mail_20110402", &cont)
 }
 
-type Email struct {
-	MessageId string
-	Date      string
-	From      string
-	To        string
-	Subject   string
-	Xfolder   string
-	Message   string
+
+
+func countEmails(dir string, cont *int) {   
+	files, err := ioutil.ReadDir(dir)
+	if err != nil {
+		fmt.Println("Error reading email dir ", err)
+	}
+	for _, file := range files {
+		if file.IsDir() {
+			countEmails(dir+"/"+file.Name(), cont)
+		} else {
+
+			*cont += 1
+			fmt.Println(*cont)
+		}
+	}
 }
 
-func searchEmails(dir string, cont *int, registers *string) {
+func searchEmails(dir string, cont *int, registers *[]map[string]interface{}) {
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
 		fmt.Println("Error reading email dir ", err)
@@ -41,21 +47,28 @@ func searchEmails(dir string, cont *int, registers *string) {
 		} else {
 			scanText(dir+"/"+file.Name(), cont, registers)
 			*cont += 1
-			fmt.Println(*cont)
 		}
 	}
 }
 
-func scanText(dir string, cont *int, registers *string) {
+func scanText(dir string, cont *int, registers *[]map[string]interface{}) {
 	emptyLine := 0
 	message := ""
-	
-	var structMail Email
+
 	file, err := os.Open(dir)
 	if err != nil {
 		fmt.Println("Error reading email information ", err)
 	}
 	defer file.Close()
+	record := map[string]interface{}{
+		"MessageId": "",
+		"Date":      "",
+		"From":     "",
+		"To":        "",
+		"Subject":   "",
+		"Xfolder":   "",
+		"Message":   "",
+	}
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		if len(scanner.Bytes()) == 0 && emptyLine == 0 {
@@ -63,46 +76,34 @@ func scanText(dir string, cont *int, registers *string) {
 		}
 
 		if strings.HasPrefix(scanner.Text(), "Message-ID: ") {
-			structMail.MessageId = strings.Split(scanner.Text(), ": ")[1]
+			record["MessageId"] = strings.Split(scanner.Text(), ": ")[1]
 		} else if strings.HasPrefix(scanner.Text(), "Date: ") {
-			structMail.Date = strings.Split(scanner.Text(), ": ")[1]
+			record["Date"] = strings.Split(scanner.Text(), ": ")[1]
 		} else if strings.HasPrefix(scanner.Text(), "From: ") {
-			structMail.From = strings.Split(scanner.Text(), ": ")[1]
+			record["From"] = strings.Split(scanner.Text(), ": ")[1]
 		} else if strings.HasPrefix(scanner.Text(), "To: ") {
-			structMail.To = strings.Split(scanner.Text(), ": ")[1]
+			record["To"] = strings.Split(scanner.Text(), ": ")[1]
 		} else if strings.HasPrefix(scanner.Text(), "Subject: ") {
-			structMail.Subject = strings.Split(scanner.Text(), ": ")[1]
+			record["Subject"] = strings.Split(scanner.Text(), ": ")[1]
 		} else if strings.HasPrefix(scanner.Text(), "X-Folder: ") {
-			structMail.Xfolder = strings.Split(scanner.Text(), ": ")[1]
+			record["Xfolder"] = strings.Split(scanner.Text(), ": ")[1]
 		}
 
 		if emptyLine == 1 {
 			message += "\n" + scanner.Text()
 		}
 	}
-	structMail.Message = message
-
-	e, err := json.MarshalIndent(structMail, "", " ")
+	record["Message"] = message
+	*registers = append(*registers, record)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	index := `{ "index" : { "_index" : "Emails" } }`
-	*registers += index + "\n" +string(e)+ "\n"
+	index := `Emails`
 
 	if *cont == 500 {
 
-		// f, err := os.OpenFile("processedMails.ndjson", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
-		// if err != nil {
-		// 	log.Fatal(err)
-		// }
-		// f.WriteString(*registers)
-		// f.Close()
-		// panic(1)
-
-		// fmt.Println("500 REGISTER")
-		// fmt.Println(*registers)
 		user := "admin"
 		pass := "123"
 
@@ -110,27 +111,20 @@ func scanText(dir string, cont *int, registers *string) {
 			UserName: user,
 			Password: pass,
 		})
+		query := *client.NewMetaJSONIngest()
+		query.SetIndex(index)
+		query.SetRecords(*registers)
 		configuration := client.NewConfiguration()
 		apiClient := client.NewAPIClient(configuration)
-		resp, r, err := apiClient.Document.Bulk(auth).Query(*registers).Execute()
+		resp, r, err := apiClient.Document.Bulkv2(auth).Query(query).Execute()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error when calling `Document.Bulk``: %v\n", err)
 			fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 		}
 		// response from `Bulk`: MetaHTTPResponseRecordCount
-		fmt.Fprintf(os.Stdout, "Response from `Document.Bulk`: %v\n", *resp)
+		fmt.Fprintf(os.Stdout, "Response from `Document.Bulk`: %v\n", *resp.RecordCount)
 
 		*cont = 0
-		*registers = ""
+		*registers = nil
 	}
-	
-
-	// f, err := os.OpenFile("processedMails.ndjson", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// f.WriteString(`{ "index" : { "_index" : "Emails" } }`)
-	// f.WriteString("\n")
-	// f.WriteString(string(e) + "\n")
-	// f.Close()
 }

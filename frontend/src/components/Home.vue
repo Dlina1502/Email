@@ -81,10 +81,9 @@ export default {
         },
         body: JSON.stringify({ input: this.search })
       }
-
+      this.messages=[];
       const resp = fetch("http://localhost:3000/searchMail", options);
       resp.then(res => res.json()).then(data => data.hits.hits).then(hits => hits.map((data) => this.messages.push(data)))
-      console.log(messages + "hola")
     },
     showEmail(data) {
       this.cMessage = data

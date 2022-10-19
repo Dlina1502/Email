@@ -2,12 +2,12 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
+	client "github.com/zinclabs/sdk-go-zincsearch"
 	"io/ioutil"
 	"os"
 	"strings"
-	"context"
-	client "github.com/zinclabs/sdk-go-zincsearch"
 )
 
 func main() {
@@ -15,12 +15,10 @@ func main() {
 	var registers []map[string]interface{}
 	cont = 0
 	searchEmails("./enron_mail_20110402", &cont, &registers)
-	//countEmails("./enron_mail_20110402", &cont)
+	sendMail(&cont, &registers)
 }
 
-
-
-func countEmails(dir string, cont *int) {   
+func countEmails(dir string, cont *int) {
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
 		fmt.Println("Error reading email dir ", err)
@@ -63,7 +61,7 @@ func scanText(dir string, cont *int, registers *[]map[string]interface{}) {
 	record := map[string]interface{}{
 		"MessageId": "",
 		"Date":      "",
-		"From":     "",
+		"From":      "",
 		"To":        "",
 		"Subject":   "",
 		"Xfolder":   "",
@@ -100,31 +98,35 @@ func scanText(dir string, cont *int, registers *[]map[string]interface{}) {
 		return
 	}
 
+	if *cont == 500 {
+		sendMail(cont, registers)
+	}
+}
+
+func sendMail(cont *int, registers *[]map[string]interface{}) {
 	index := `Emails`
 
-	if *cont == 500 {
+	user := "admin"
+	pass := "123"
 
-		user := "admin"
-		pass := "123"
-
-		auth := context.WithValue(context.Background(), client.ContextBasicAuth, client.BasicAuth{
-			UserName: user,
-			Password: pass,
-		})
-		query := *client.NewMetaJSONIngest()
-		query.SetIndex(index)
-		query.SetRecords(*registers)
-		configuration := client.NewConfiguration()
-		apiClient := client.NewAPIClient(configuration)
-		resp, r, err := apiClient.Document.Bulkv2(auth).Query(query).Execute()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error when calling `Document.Bulk``: %v\n", err)
-			fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-		}
-		// response from `Bulk`: MetaHTTPResponseRecordCount
-		fmt.Fprintf(os.Stdout, "Response from `Document.Bulk`: %v\n", *resp.RecordCount)
-
-		*cont = 0
-		*registers = nil
+	auth := context.WithValue(context.Background(), client.ContextBasicAuth, client.BasicAuth{
+		UserName: user,
+		Password: pass,
+	})
+	query := *client.NewMetaJSONIngest()
+	query.SetIndex(index)
+	query.SetRecords(*registers)
+	configuration := client.NewConfiguration()
+	apiClient := client.NewAPIClient(configuration)
+	resp, r, err := apiClient.Document.Bulkv2(auth).Query(query).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `Document.Bulk``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
+	// response from `Bulk`: MetaHTTPResponseRecordCount
+	fmt.Fprintf(os.Stdout, "Response from `Document.Bulk`: %v\n", *resp.RecordCount)
+
+	*cont = 0
+	*registers = nil
+
 }

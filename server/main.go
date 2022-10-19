@@ -21,7 +21,7 @@ func main() {
 		middleware.Logger,
 		middleware.Recoverer,
 	)
-	// r.Get("/searchMail", )
+
 	r.Options("/searchMail", func(w http.ResponseWriter, r *http.Request) {
 		// cors
 		w.Header().Set("Content-Type", "application/json")
@@ -38,15 +38,6 @@ func handlerPost(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Headers", "*")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	// var query string
-	// err:= json.NewDecoder((r.Body).Decode(&query))
-	// if err != nil {
-	// 	fmt.Println(err)
-	// }
-	// bodyJson, err := json.Marshal(query.Query)
-	// if err != nil {
-	// 	fmt.Println(err)
-	// }
 	defer r.Body.Close()
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -69,7 +60,6 @@ func handlerPost(w http.ResponseWriter, r *http.Request) {
 				]
 			}
 		}
-
 	}`
 	
 	fmt.Println(strings.NewReader(query))
